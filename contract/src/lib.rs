@@ -1,6 +1,6 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, LookupSet};
-use near_sdk::serde::Serialize;
+use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault};
 
 #[near_bindgen]
@@ -19,7 +19,7 @@ type ElectionId = u128;
 type CandidateId = u8;
 type VoterId = AccountId;
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize)]
+#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Election {
     start: u64,
@@ -76,12 +76,12 @@ impl Elections {
         );
         assert!(election.start < election.end, "Start should be before end");
 
+        //TODO: charge organization for election creation
         let organization_id = env::predecessor_account_id();
         let id = self
             .organizations
             .get(&organization_id)
             .expect("Account is not registered as a valid organization.");
-        // charge organization for election creation
         self.organizations.insert(&organization_id, &(id + 1));
         self.elections.insert(&(organization_id, id), election);
         id
