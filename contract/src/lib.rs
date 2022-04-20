@@ -3,6 +3,7 @@ use near_sdk::collections::{LookupMap, LookupSet};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault};
 
+const CREATE_ELECTION_COST: u128 = 1; // NEAR
 #[near_bindgen]
 #[derive(PanicOnDefault, BorshDeserialize, BorshSerialize)]
 pub struct Elections {
@@ -65,6 +66,7 @@ impl Elections {
         self.organizations.insert(account, &0);
     }
 
+    #[payable]
     pub fn create_election(&mut self, election: &Election) -> u128 {
         assert!(
             election.candidates.len() > 1,
@@ -75,8 +77,12 @@ impl Elections {
             "Start should be in the future"
         );
         assert!(election.start < election.end, "Start should be before end");
+        assert!(
+            env::attached_deposit() == to_yocto(CREATE_ELECTION_COST),
+            "Create election is paid function. Expects to receive exactly {} NEAR",
+            CREATE_ELECTION_COST
+        );
 
-        //TODO: charge organization for election creation
         let organization_id = env::predecessor_account_id();
         let id = self
             .organizations
@@ -97,6 +103,10 @@ impl Elections {
     pub fn vote() {}
 }
 
+fn to_yocto(n: u128) -> u128 {
+    n * (10 as u128).pow(24)
+}
+
 #[cfg(test)]
 mod tests {
     use std::convert::TryInto;
@@ -109,6 +119,7 @@ mod tests {
     const OWNER: &str = "alice.testnet";
     const USER: &str = "bob.testnet";
     const ORGANIZATION: &str = "org1.testnet";
+    const EXPECTED_CREATE_ELECTION_COST: u128 = 1_000_000_000_000_000_000_000_000;
 
     #[test]
     fn should_create_organization() {
@@ -136,7 +147,9 @@ mod tests {
         let mut contract = create_contract();
         let organization = account(ORGANIZATION);
         contract.organizations.insert(&organization, &0);
-        prepare_env(ORGANIZATION);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
         let input = Election::new();
 
         let id = contract.create_election(&input);
@@ -157,7 +170,9 @@ mod tests {
     fn should_check_organization_registration_on_create() {
         let mut contract = create_contract();
         contract.organizations.insert(&account(ORGANIZATION), &0);
-        prepare_env(USER);
+        testing_env!(context(USER)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
 
         contract.create_election(&Election::new());
     }
@@ -168,7 +183,9 @@ mod tests {
         let mut contract = create_contract();
         let organization = account(ORGANIZATION);
         contract.organizations.insert(&organization, &0);
-        prepare_env(ORGANIZATION);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
         let input =
             Election::new().set_start(Utc::now().checked_sub_signed(Duration::days(1)).unwrap());
 
@@ -181,7 +198,9 @@ mod tests {
         let mut contract = create_contract();
         let organization = account(ORGANIZATION);
         contract.organizations.insert(&organization, &0);
-        prepare_env(ORGANIZATION);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
         let input = Election::new().set_end(Utc::now());
 
         contract.create_election(&input);
@@ -193,7 +212,9 @@ mod tests {
         let mut contract = create_contract();
         let organization = account(ORGANIZATION);
         contract.organizations.insert(&organization, &0);
-        prepare_env(ORGANIZATION);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
         let input = Election::new().set_candidates(vec![]);
 
         contract.create_election(&input);
@@ -205,10 +226,34 @@ mod tests {
         let mut contract = create_contract();
         let organization = account(ORGANIZATION);
         contract.organizations.insert(&organization, &0);
-        prepare_env(ORGANIZATION);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
         let input = Election::new().set_candidates(vec!["Alice".to_string()]);
 
         contract.create_election(&input);
+    }
+
+    #[test]
+    #[should_panic(expected = "paid")]
+    fn should_require_deposit_on_create() {
+        let mut contract = create_contract();
+        contract.organizations.insert(&account(ORGANIZATION), &0);
+        prepare_env(ORGANIZATION);
+
+        contract.create_election(&Election::new());
+    }
+
+    #[test]
+    #[should_panic(expected = "paid")]
+    fn should_require_exact_deposit_on_create() {
+        let mut contract = create_contract();
+        contract.organizations.insert(&account(ORGANIZATION), &0);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST * 2)
+            .build());
+
+        contract.create_election(&Election::new());
     }
 
     fn create_contract() -> Elections {
@@ -217,10 +262,15 @@ mod tests {
     }
 
     fn prepare_env(predecessor: &str) {
-        testing_env!(VMContextBuilder::new()
+        testing_env!(context(predecessor).build())
+    }
+
+    fn context(predecessor: &str) -> VMContextBuilder {
+        let mut builder = VMContextBuilder::new();
+        builder
             .predecessor_account_id(account(predecessor))
-            .block_timestamp(nanoseconds(Utc::now()))
-            .build())
+            .block_timestamp(nanoseconds(Utc::now()));
+        builder
     }
 
     fn account(name: &str) -> AccountId {
