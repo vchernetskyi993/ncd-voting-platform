@@ -10,6 +10,7 @@ const CREATE_ELECTION_COST: u128 = 1; // NEAR
 const NOT_REGISTERED_ERROR: &str = "Account is not registered as a valid organization.";
 const CANDIDATES_LIMIT: u16 = 256;
 
+/// Contract for performing public elections between values.
 #[near_bindgen]
 #[derive(PanicOnDefault, BorshDeserialize, BorshSerialize)]
 pub struct Elections {
@@ -26,6 +27,7 @@ type ElectionId = u128;
 type CandidateId = u8;
 type VoterId = AccountId;
 
+/// Election data actually stored.
 #[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct Election {
@@ -36,6 +38,7 @@ pub struct Election {
     candidates: Vec<String>,
 }
 
+/// Election view for clients.
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ElectionView {
@@ -63,6 +66,9 @@ enum StorageKeys {
 
 #[near_bindgen]
 impl Elections {
+    /// Contract init function. Could be called only once.
+    /// 
+    /// Sets the caller as contract owner.
     #[init]
     pub fn new() -> Self {
         Self {
@@ -74,6 +80,15 @@ impl Elections {
         }
     }
 
+    /// Register account as an organization. 
+    /// 
+    /// # Arguments
+    /// 
+    /// * `account` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
+    /// 
+    /// # Panics
+    /// 
+    /// * Only owner is allowed to call this function.
     pub fn register_organization(&mut self, account: &OrganizationId) {
         assert_eq!(
             env::predecessor_account_id(),
@@ -83,6 +98,19 @@ impl Elections {
         self.organizations.insert(account, &0);
     }
 
+    /// Create new election. 
+    /// 
+    /// # Arguments
+    /// 
+    /// * `election` - initial [Election](struct.Election.html) data to store
+    /// 
+    /// # Panics
+    /// 
+    /// * Function is a paid one. Expects exactly **1 NEAR** deposit.
+    /// * Only registered organization is allowed to call this function.
+    /// * Candidates array length should be between 2 and 256 elements.
+    /// * Start and end dates are validated based on block timestamp. 
+    ///   They both should be in the future and end should be after start.
     #[payable]
     pub fn create_election(&mut self, election: &Election) -> u128 {
         assert!(
@@ -115,12 +143,31 @@ impl Elections {
         id
     }
 
+    /// Returns number of elections for an organization.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
+    /// 
+    /// # Panics
+    /// 
+    /// * Organization should be registered.
     pub fn elections_count(&self, organization_id: &OrganizationId) -> u128 {
         self.organizations
             .get(organization_id)
             .expect(NOT_REGISTERED_ERROR)
     }
 
+    /// Returns election data.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
+    /// * `election_id` - u128 id
+    /// 
+    /// # Panics
+    /// 
+    /// * Election not found.
     pub fn get_election(
         &self,
         organization_id: &OrganizationId,
@@ -147,10 +194,7 @@ impl Elections {
                         .get(&(
                             organization_id.clone(),
                             election_id.clone(),
-                            i.try_into().expect(&format!(
-                                "Maximum {} candidates expected",
-                                CANDIDATES_LIMIT
-                            )),
+                            i.try_into().unwrap(),
                         ))
                         .unwrap_or(0),
                 })
