@@ -1,9 +1,15 @@
+use std::convert::TryInto;
+
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LookupMap, LookupSet};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault};
 
 const CREATE_ELECTION_COST: u128 = 1; // NEAR
+
+const NOT_REGISTERED_ERROR: &str = "Account is not registered as a valid organization.";
+const CANDIDATES_LIMIT: u16 = 256;
+
 #[near_bindgen]
 #[derive(PanicOnDefault, BorshDeserialize, BorshSerialize)]
 pub struct Elections {
@@ -30,7 +36,18 @@ pub struct Election {
     candidates: Vec<String>,
 }
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ElectionView {
+    start: u64,
+    end: u64,
+    title: String,
+    description: String,
+    candidates: Vec<Candidate>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "near_sdk::serde")]
 struct Candidate {
     name: String,
     votes: u128,
@@ -57,7 +74,7 @@ impl Elections {
         }
     }
 
-    pub fn register_organization(&mut self, account: &AccountId) {
+    pub fn register_organization(&mut self, account: &OrganizationId) {
         assert_eq!(
             env::predecessor_account_id(),
             self.owner_id,
@@ -71,6 +88,11 @@ impl Elections {
         assert!(
             election.candidates.len() > 1,
             "More than one candidate should be provided"
+        );
+        assert!(
+            election.candidates.len() <= CANDIDATES_LIMIT.into(),
+            "Maximum {} candidates expected",
+            CANDIDATES_LIMIT,
         );
         assert!(
             election.start > env::block_timestamp(),
@@ -87,17 +109,56 @@ impl Elections {
         let id = self
             .organizations
             .get(&organization_id)
-            .expect("Account is not registered as a valid organization.");
+            .expect(NOT_REGISTERED_ERROR);
         self.organizations.insert(&organization_id, &(id + 1));
         self.elections.insert(&(organization_id, id), election);
         id
     }
 
-    // any user
-    pub fn elections_count() {}
+    pub fn elections_count(&self, organization_id: &OrganizationId) -> u128 {
+        self.organizations
+            .get(organization_id)
+            .expect(NOT_REGISTERED_ERROR)
+    }
 
-    pub fn get_election() {}
+    pub fn get_election(
+        &self,
+        organization_id: &OrganizationId,
+        election_id: &ElectionId,
+    ) -> ElectionView {
+        let election = self
+            .elections
+            .get(&(organization_id.clone(), election_id.clone()))
+            .expect("Election not found");
 
+        ElectionView {
+            start: election.start,
+            end: election.end,
+            title: election.title,
+            description: election.description,
+            candidates: election
+                .candidates
+                .iter()
+                .enumerate()
+                .map(|(i, candidate)| Candidate {
+                    name: candidate.clone(),
+                    votes: self
+                        .votes
+                        .get(&(
+                            organization_id.clone(),
+                            election_id.clone(),
+                            i.try_into().expect(&format!(
+                                "Maximum {} candidates expected",
+                                CANDIDATES_LIMIT
+                            )),
+                        ))
+                        .unwrap_or(0),
+                })
+                .collect(),
+        }
+    }
+
+    // TODO: implement voter functions
     pub fn have_voted() {}
 
     pub fn vote() {}
@@ -254,6 +315,63 @@ mod tests {
             .build());
 
         contract.create_election(&Election::new());
+    }
+
+    #[test]
+    #[should_panic(expected = "256")]
+    fn should_allow_maximum_256_candidates() {
+        let mut contract = create_contract();
+        contract.organizations.insert(&account(ORGANIZATION), &0);
+        testing_env!(context(ORGANIZATION)
+            .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
+            .build());
+
+        contract.create_election(
+            &Election::new().set_candidates((0..).take(257).map(|_| "Bob".to_string()).collect()),
+        );
+    }
+
+    #[test]
+    fn should_fetch_election_count() {
+        let count = 14;
+        let organization = account(ORGANIZATION);
+        let mut contract = create_contract();
+        contract.organizations.insert(&organization, &count);
+        prepare_env(USER);
+
+        let result = contract.elections_count(&organization);
+
+        assert_eq!(result, count);
+    }
+
+    #[test]
+    fn should_fetch_election() {
+        let organization = account(ORGANIZATION);
+        let mut contract = create_contract();
+        let election_id = 1;
+        let saved = Election::new();
+        contract
+            .elections
+            .insert(&(organization.clone(), election_id), &saved);
+        let bob_votes = 3;
+        contract
+            .votes
+            .insert(&(organization.clone(), election_id, 1), &bob_votes);
+        prepare_env(USER);
+
+        let result = contract.get_election(&organization, &election_id);
+
+        assert_eq!(result.start, saved.start);
+        assert_eq!(result.end, saved.end);
+        assert_eq!(result.title, saved.title);
+        assert_eq!(result.description, saved.description);
+        assert_eq!(result.candidates.len(), 2);
+        let alice = result.candidates.get(0).unwrap();
+        assert_eq!(alice.name, "Alice".to_string());
+        assert_eq!(alice.votes, 0);
+        let bob = result.candidates.get(1).unwrap();
+        assert_eq!(bob.name, "Bob".to_string());
+        assert_eq!(bob.votes, bob_votes);
     }
 
     fn create_contract() -> Elections {
