@@ -42,8 +42,8 @@ pub struct Election {
 #[derive(Serialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ElectionView {
-    start: u64,
-    end: u64,
+    start: String,
+    end: String,
     title: String,
     description: String,
     candidates: Vec<Candidate>,
@@ -53,7 +53,7 @@ pub struct ElectionView {
 #[serde(crate = "near_sdk::serde")]
 struct Candidate {
     name: String,
-    votes: u128,
+    votes: String,
 }
 
 #[derive(BorshSerialize, BorshStorageKey)]
@@ -67,7 +67,7 @@ enum StorageKeys {
 #[near_bindgen]
 impl Elections {
     /// Contract init function. Could be called only once.
-    /// 
+    ///
     /// Sets the caller as contract owner.
     #[init]
     pub fn new() -> Self {
@@ -80,14 +80,14 @@ impl Elections {
         }
     }
 
-    /// Register account as an organization. 
-    /// 
+    /// Register account as an organization.
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `account` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// * Only owner is allowed to call this function.
     pub fn register_organization(&mut self, account: &OrganizationId) {
         assert_eq!(
@@ -98,18 +98,18 @@ impl Elections {
         self.organizations.insert(account, &0);
     }
 
-    /// Create new election. 
-    /// 
+    /// Create new election.
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `election` - initial [Election](struct.Election.html) data to store
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// * Function is a paid one. Expects exactly **1 NEAR** deposit.
     /// * Only registered organization is allowed to call this function.
     /// * Candidates array length should be between 2 and 256 elements.
-    /// * Start and end dates are validated based on block timestamp. 
+    /// * Start and end dates are validated based on block timestamp.
     ///   They both should be in the future and end should be after start.
     #[payable]
     pub fn create_election(&mut self, election: &Election) -> u128 {
@@ -144,13 +144,13 @@ impl Elections {
     }
 
     /// Returns number of elections for an organization.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// * Organization should be registered.
     pub fn elections_count(&self, organization_id: &OrganizationId) -> u128 {
         self.organizations
@@ -159,28 +159,31 @@ impl Elections {
     }
 
     /// Returns election data.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
     /// * `election_id` - u128 id
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// * Election not found.
     pub fn get_election(
         &self,
         organization_id: &OrganizationId,
-        election_id: &ElectionId,
+        election_id: String,
     ) -> ElectionView {
         let election = self
             .elections
-            .get(&(organization_id.clone(), election_id.clone()))
+            .get(&(
+                organization_id.clone(),
+                election_id.parse::<u128>().unwrap(),
+            ))
             .expect("Election not found");
 
         ElectionView {
-            start: election.start,
-            end: election.end,
+            start: election.start.to_string(),
+            end: election.end.to_string(),
             title: election.title,
             description: election.description,
             candidates: election
@@ -193,10 +196,11 @@ impl Elections {
                         .votes
                         .get(&(
                             organization_id.clone(),
-                            election_id.clone(),
+                            election_id.parse::<u128>().unwrap(),
                             i.try_into().unwrap(),
                         ))
-                        .unwrap_or(0),
+                        .unwrap_or(0)
+                        .to_string(),
                 })
                 .collect(),
         }
@@ -403,19 +407,19 @@ mod tests {
             .insert(&(organization.clone(), election_id, 1), &bob_votes);
         prepare_env(USER);
 
-        let result = contract.get_election(&organization, &election_id);
+        let result = contract.get_election(&organization, election_id.to_string());
 
-        assert_eq!(result.start, saved.start);
-        assert_eq!(result.end, saved.end);
+        assert_eq!(result.start, saved.start.to_string());
+        assert_eq!(result.end, saved.end.to_string());
         assert_eq!(result.title, saved.title);
         assert_eq!(result.description, saved.description);
         assert_eq!(result.candidates.len(), 2);
         let alice = result.candidates.get(0).unwrap();
         assert_eq!(alice.name, "Alice".to_string());
-        assert_eq!(alice.votes, 0);
+        assert_eq!(alice.votes, "0");
         let bob = result.candidates.get(1).unwrap();
         assert_eq!(bob.name, "Bob".to_string());
-        assert_eq!(bob.votes, bob_votes);
+        assert_eq!(bob.votes, bob_votes.to_string());
     }
 
     fn create_contract() -> Elections {
