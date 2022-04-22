@@ -31,7 +31,7 @@ near create-account org1.$MASTER_ACCOUNT --masterAccount $MASTER_ACCOUNT
 
 near call elections.$MASTER_ACCOUNT register_organization \
     --args "{\"account\": \"org1.$MASTER_ACCOUNT\"}" \
-    --accountId elections.vchernetskyi.testnet
+    --accountId elections.$MASTER_ACCOUNT
 
 ELECTION_DATA=$(python scripts/generate_election.py)
 near call elections.$MASTER_ACCOUNT create_election \
