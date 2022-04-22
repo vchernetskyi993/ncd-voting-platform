@@ -1,5 +1,4 @@
-import dotenv from "dotenv";
+import { initializeConfig } from "./config";
 import { startServer } from "./server";
 
-dotenv.config();
-startServer();
+startServer(initializeConfig());
