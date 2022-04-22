@@ -28,11 +28,32 @@ type CandidateId = u8;
 type VoterId = AccountId;
 
 /// Election data actually stored.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct Election {
+#[derive(BorshDeserialize, BorshSerialize)]
+struct Election {
     start: u64,
     end: u64,
+    title: String,
+    description: String,
+    candidates: Vec<String>,
+}
+
+impl Election {
+    fn new(input: &ElectionInput) -> Self {
+        Self {
+            start: input.start.parse().unwrap(),
+            end: input.end.parse().unwrap(),
+            title: input.title.clone(),
+            description: input.description.clone(),
+            candidates: input.candidates.clone(),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ElectionInput {
+    start: String,
+    end: String,
     title: String,
     description: String,
     candidates: Vec<String>,
@@ -112,7 +133,8 @@ impl Elections {
     /// * Start and end dates are validated based on block timestamp.
     ///   They both should be in the future and end should be after start.
     #[payable]
-    pub fn create_election(&mut self, election: &Election) -> u128 {
+    pub fn create_election(&mut self, input: &ElectionInput) -> u128 {
+        let election = Election::new(input);
         assert!(
             election.candidates.len() > 1,
             "More than one candidate should be provided"
@@ -139,7 +161,7 @@ impl Elections {
             .get(&organization_id)
             .expect(NOT_REGISTERED_ERROR);
         self.organizations.insert(&organization_id, &(id + 1));
-        self.elections.insert(&(organization_id, id), election);
+        self.elections.insert(&(organization_id, id), &election);
         id
     }
 
@@ -259,7 +281,7 @@ mod tests {
         testing_env!(context(ORGANIZATION)
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
-        let input = Election::new();
+        let input = ElectionInput::new();
 
         let id = contract.create_election(&input);
 
@@ -267,8 +289,8 @@ mod tests {
         assert_eq!(contract.organizations.get(&organization).unwrap(), 1);
         assert!(contract.elections.contains_key(&(organization.clone(), id)));
         let saved = contract.elections.get(&(organization, id)).unwrap();
-        assert_eq!(saved.start, input.start);
-        assert_eq!(saved.end, input.end);
+        assert_eq!(saved.start.to_string(), input.start);
+        assert_eq!(saved.end.to_string(), input.end);
         assert_eq!(saved.title, input.title);
         assert_eq!(saved.description, input.description);
         assert_eq!(saved.candidates, input.candidates);
@@ -283,7 +305,7 @@ mod tests {
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
 
-        contract.create_election(&Election::new());
+        contract.create_election(&ElectionInput::new());
     }
 
     #[test]
@@ -296,7 +318,7 @@ mod tests {
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
         let input =
-            Election::new().set_start(Utc::now().checked_sub_signed(Duration::days(1)).unwrap());
+            ElectionInput::new().set_start(Utc::now().checked_sub_signed(Duration::days(1)).unwrap());
 
         contract.create_election(&input);
     }
@@ -310,7 +332,7 @@ mod tests {
         testing_env!(context(ORGANIZATION)
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
-        let input = Election::new().set_end(Utc::now());
+        let input = ElectionInput::new().set_end(Utc::now());
 
         contract.create_election(&input);
     }
@@ -324,7 +346,7 @@ mod tests {
         testing_env!(context(ORGANIZATION)
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
-        let input = Election::new().set_candidates(vec![]);
+        let input = ElectionInput::new().set_candidates(vec![]);
 
         contract.create_election(&input);
     }
@@ -338,7 +360,7 @@ mod tests {
         testing_env!(context(ORGANIZATION)
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
-        let input = Election::new().set_candidates(vec!["Alice".to_string()]);
+        let input = ElectionInput::new().set_candidates(vec!["Alice".to_string()]);
 
         contract.create_election(&input);
     }
@@ -350,7 +372,7 @@ mod tests {
         contract.organizations.insert(&account(ORGANIZATION), &0);
         prepare_env(ORGANIZATION);
 
-        contract.create_election(&Election::new());
+        contract.create_election(&ElectionInput::new());
     }
 
     #[test]
@@ -362,7 +384,7 @@ mod tests {
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST * 2)
             .build());
 
-        contract.create_election(&Election::new());
+        contract.create_election(&ElectionInput::new());
     }
 
     #[test]
@@ -375,7 +397,7 @@ mod tests {
             .build());
 
         contract.create_election(
-            &Election::new().set_candidates((0..).take(257).map(|_| "Bob".to_string()).collect()),
+            &ElectionInput::new().set_candidates((0..).take(257).map(|_| "Bob".to_string()).collect()),
         );
     }
 
@@ -397,10 +419,10 @@ mod tests {
         let organization = account(ORGANIZATION);
         let mut contract = create_contract();
         let election_id = 1;
-        let saved = Election::new();
+        let input = ElectionInput::new();
         contract
             .elections
-            .insert(&(organization.clone(), election_id), &saved);
+            .insert(&(organization.clone(), election_id), &Election::new(&input));
         let bob_votes = 3;
         contract
             .votes
@@ -409,10 +431,10 @@ mod tests {
 
         let result = contract.get_election(&organization, election_id.to_string());
 
-        assert_eq!(result.start, saved.start.to_string());
-        assert_eq!(result.end, saved.end.to_string());
-        assert_eq!(result.title, saved.title);
-        assert_eq!(result.description, saved.description);
+        assert_eq!(result.start, input.start);
+        assert_eq!(result.end, input.end);
+        assert_eq!(result.title, input.title);
+        assert_eq!(result.description, input.description);
         assert_eq!(result.candidates.len(), 2);
         let alice = result.candidates.get(0).unwrap();
         assert_eq!(alice.name, "Alice".to_string());
@@ -447,11 +469,13 @@ mod tests {
         date.timestamp_nanos().try_into().unwrap()
     }
 
-    impl Election {
+    impl ElectionInput {
         fn new() -> Self {
             Self {
-                start: nanoseconds(Utc::now().checked_add_signed(Duration::days(1)).unwrap()),
-                end: nanoseconds(Utc::now().checked_add_signed(Duration::days(3)).unwrap()),
+                start: nanoseconds(Utc::now().checked_add_signed(Duration::days(1)).unwrap())
+                    .to_string(),
+                end: nanoseconds(Utc::now().checked_add_signed(Duration::days(3)).unwrap())
+                    .to_string(),
                 title: "My Election".to_string(),
                 description: "My Description".to_string(),
                 candidates: vec!["Alice".to_string(), "Bob".to_string()],
@@ -459,12 +483,12 @@ mod tests {
         }
 
         fn set_start(mut self, start: DateTime<Utc>) -> Self {
-            self.start = nanoseconds(start);
+            self.start = nanoseconds(start).to_string();
             self
         }
 
         fn set_end(mut self, end: DateTime<Utc>) -> Self {
-            self.end = nanoseconds(end);
+            self.end = nanoseconds(end).to_string();
             self
         }
 
