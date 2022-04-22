@@ -7,6 +7,8 @@ Core part of open elections. Contact for communicating with NEAR network.
 ```shell
 nearup run localnet
 export NODE_ENV=local
+# if network is started on different machine:
+# export NEAR_NODE_URL="http://<host_ip>:3030"
 
 near create-account vchernetskyi.node0 \
     --masterAccount node0 \
