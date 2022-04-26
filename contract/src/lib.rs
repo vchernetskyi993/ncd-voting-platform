@@ -186,15 +186,16 @@ impl Elections {
     /// # Arguments
     ///
     /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
-    /// * `election_id` - u128 id
+    /// * `election_id` - String id
     ///
     /// # Panics
     ///
+    /// * `election_id` can not be parsed as u128
     /// * Election not found.
     pub fn get_election(
         &self,
         organization_id: &OrganizationId,
-        election_id: String,
+        election_id: &String,
     ) -> ElectionView {
         let election = self
             .elections
@@ -219,7 +220,7 @@ impl Elections {
                         .votes
                         .get(&(
                             organization_id.clone(),
-                            election_id.parse::<u128>().unwrap(),
+                            election_id.parse().unwrap(),
                             i.try_into().unwrap(),
                         ))
                         .unwrap_or(0)
@@ -229,7 +230,17 @@ impl Elections {
         }
     }
 
-    pub fn have_voted(&self, organization_id: &OrganizationId, election_id: String) -> bool {
+    /// Checks if caller has already voted.
+    ///
+    /// # Arguments
+    ///
+    /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
+    /// * `election_id` - String id
+    ///
+    /// # Panics
+    ///
+    /// * `election_id` can not be parsed as u128
+    pub fn have_voted(&self, organization_id: &OrganizationId, election_id: &String) -> bool {
         self.voters.contains(&(
             organization_id.clone(),
             election_id.parse().unwrap(),
@@ -237,8 +248,51 @@ impl Elections {
         ))
     }
 
-    // TODO: implement vote function
-    pub fn vote() {}
+    /// Vote in some election.
+    ///
+    /// # Arguments
+    ///
+    /// * `organization_id` - [AccountId](../near_sdk/struct.AccountId.html) of an organization
+    /// * `election_id` - String id
+    /// * `candidate_id` - u8 id
+    ///
+    /// # Panics
+    ///
+    /// * `election_id` should be parsed as u128.
+    /// * `organization_id` & `election_id` & `candidate_id` should be a valid combination.
+    /// * Current date should be between start and end dates of the election.
+    /// * User shouldn't try to vote more than once.
+    pub fn vote(
+        &mut self,
+        organization_id: &OrganizationId,
+        election_id: &String,
+        candidate_id: u8,
+    ) {
+        let election_id_parsed = election_id.parse().unwrap();
+        let election = self
+            .elections
+            .get(&(organization_id.clone(), election_id_parsed))
+            .unwrap();
+        assert!(
+            election.start < env::block_timestamp(),
+            "Election not started yet"
+        );
+        assert!(
+            election.end > env::block_timestamp(),
+            "Election already ended"
+        );
+        let voter_key = &(
+            organization_id.clone(),
+            election_id_parsed,
+            env::predecessor_account_id(),
+        );
+        assert!(!self.voters.contains(voter_key), "User already voted");
+
+        let candidate_key = &(organization_id.clone(), election_id_parsed, candidate_id);
+        let votes = self.votes.get(candidate_key).unwrap_or(0);
+        self.votes.insert(candidate_key, &(votes + 1));
+        self.voters.insert(voter_key);
+    }
 }
 
 fn to_yocto(n: u128) -> u128 {
@@ -433,7 +487,7 @@ mod tests {
             .insert(&(organization.clone(), election_id, user));
         prepare_env(USER);
 
-        let result = contract.have_voted(&organization, election_id.to_string());
+        let result = contract.have_voted(&organization, &election_id.to_string());
 
         assert!(result);
     }
@@ -445,7 +499,7 @@ mod tests {
         let election_id = 12;
         prepare_env(USER);
 
-        let result = contract.have_voted(&organization, election_id.to_string());
+        let result = contract.have_voted(&organization, &election_id.to_string());
 
         assert!(!result);
     }
@@ -465,7 +519,7 @@ mod tests {
             .insert(&(organization.clone(), election_id, 1), &bob_votes);
         prepare_env(USER);
 
-        let result = contract.get_election(&organization, election_id.to_string());
+        let result = contract.get_election(&organization, &election_id.to_string());
 
         assert_eq!(result.start, input.start);
         assert_eq!(result.end, input.end);
@@ -478,6 +532,91 @@ mod tests {
         let bob = result.candidates.get(1).unwrap();
         assert_eq!(bob.name, "Bob".to_string());
         assert_eq!(bob.votes, bob_votes.to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "started")]
+    fn should_panic_if_election_not_started() {
+        let mut contract = create_contract();
+        let organization = account(ORGANIZATION);
+        let election_id = 1;
+        contract.elections.insert(
+            &(organization.clone(), election_id),
+            &Election::new(&ElectionInput::new()),
+        );
+        prepare_env(USER);
+
+        contract.vote(&organization, &election_id.to_string(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "ended")]
+    fn should_panic_if_election_finished() {
+        let mut contract = create_contract();
+        let organization = account(ORGANIZATION);
+        let election_id = 1;
+        contract.elections.insert(
+            &(organization.clone(), election_id),
+            &Election::new(&ElectionInput::new()),
+        );
+        testing_env!(context(USER)
+            .block_timestamp(nanoseconds(
+                Utc::now().checked_add_signed(Duration::days(4)).unwrap()
+            ))
+            .build());
+
+        contract.vote(&organization, &election_id.to_string(), 0);
+    }
+
+    #[test]
+    fn should_vote() {
+        let mut contract = create_contract();
+        let organization = account(ORGANIZATION);
+        let election_id = 1;
+        contract.elections.insert(
+            &(organization.clone(), election_id),
+            &Election::new(&ElectionInput::new()),
+        );
+        testing_env!(context(USER)
+            .block_timestamp(nanoseconds(
+                Utc::now().checked_add_signed(Duration::days(2)).unwrap()
+            ))
+            .build());
+        let candidate_id = 1;
+
+        contract.vote(&organization, &election_id.to_string(), candidate_id);
+
+        assert_eq!(
+            contract
+                .votes
+                .get(&(organization.clone(), election_id, candidate_id))
+                .unwrap(),
+            1
+        );
+        assert!(contract
+            .voters
+            .contains(&(organization.clone(), election_id, account(USER))));
+    }
+
+    #[test]
+    #[should_panic(expected = "already voted")]
+    fn should_prohibit_to_vote_twice() {
+        let mut contract = create_contract();
+        let organization = account(ORGANIZATION);
+        let election_id = 1;
+        contract.elections.insert(
+            &(organization.clone(), election_id),
+            &Election::new(&ElectionInput::new()),
+        );
+        testing_env!(context(USER)
+            .block_timestamp(nanoseconds(
+                Utc::now().checked_add_signed(Duration::days(2)).unwrap()
+            ))
+            .build());
+        let candidate_id = 1;
+
+        contract.vote(&organization, &election_id.to_string(), candidate_id);
+        contract.vote(&organization, &election_id.to_string(), candidate_id);
     }
 
     fn create_contract() -> Elections {

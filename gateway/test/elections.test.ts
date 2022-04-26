@@ -150,9 +150,9 @@ describe("Election API tests", () => {
 
   it("Should get paginated elections", async () => {
     // given
-    const initialCount = await contract.elections_count({
+    const initialCount = +(await contract.elections_count({
       organization_id: organizationName,
-    });
+    }));
     const addedCount = 8;
     const added = [...Array(addedCount).keys()].map((i) => election());
     await added.reduce(
