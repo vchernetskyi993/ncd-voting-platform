@@ -229,9 +229,15 @@ impl Elections {
         }
     }
 
-    // TODO: implement voter functions
-    pub fn have_voted() {}
+    pub fn have_voted(&self, organization_id: &OrganizationId, election_id: String) -> bool {
+        self.voters.contains(&(
+            organization_id.clone(),
+            election_id.parse().unwrap(),
+            env::predecessor_account_id(),
+        ))
+    }
 
+    // TODO: implement vote function
     pub fn vote() {}
 }
 
@@ -318,8 +324,8 @@ mod tests {
         testing_env!(context(ORGANIZATION)
             .attached_deposit(EXPECTED_CREATE_ELECTION_COST)
             .build());
-        let input =
-            ElectionInput::new().set_start(Utc::now().checked_sub_signed(Duration::days(1)).unwrap());
+        let input = ElectionInput::new()
+            .set_start(Utc::now().checked_sub_signed(Duration::days(1)).unwrap());
 
         contract.create_election(&input);
     }
@@ -398,7 +404,8 @@ mod tests {
             .build());
 
         contract.create_election(
-            &ElectionInput::new().set_candidates((0..).take(257).map(|_| "Bob".to_string()).collect()),
+            &ElectionInput::new()
+                .set_candidates((0..).take(257).map(|_| "Bob".to_string()).collect()),
         );
     }
 
@@ -413,6 +420,34 @@ mod tests {
         let result = contract.elections_count(&organization);
 
         assert_eq!(result, count.to_string());
+    }
+
+    #[test]
+    fn should_return_true_if_voted() {
+        let mut contract = create_contract();
+        let organization = account(ORGANIZATION);
+        let user = account(USER);
+        let election_id = 12;
+        contract
+            .voters
+            .insert(&(organization.clone(), election_id, user));
+        prepare_env(USER);
+
+        let result = contract.have_voted(&organization, election_id.to_string());
+
+        assert!(result);
+    }
+
+    #[test]
+    fn should_return_false_if_not_voted() {
+        let contract = create_contract();
+        let organization = account(ORGANIZATION);
+        let election_id = 12;
+        prepare_env(USER);
+
+        let result = contract.have_voted(&organization, election_id.to_string());
+
+        assert!(!result);
     }
 
     #[test]
