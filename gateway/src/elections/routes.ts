@@ -20,7 +20,7 @@ export function electionsRouter(contract: ElectionsContract): Router {
       const pageNumber = req.query.page || "1";
       const pageSize = req.query.pageSize || "10";
       contract
-        .getElections(pageNumber.toString(), pageSize.toString())
+        .getElections(BigInt(pageNumber.toString()), +pageSize)
         .then((page) => res.json(page))
         .catch(next);
     });

@@ -24,11 +24,11 @@ type ElectionView = {
 };
 
 type Page<T> = {
-  pageNumber: string;
+  pageNumber: bigint;
   pageSize: number;
   values: T[];
-  elementsCount: string;
-  pageCount: string;
+  elementsCount: bigint;
+  pageCount: bigint;
 };
 
 export interface ElectionsContract {
@@ -37,8 +37,8 @@ export interface ElectionsContract {
   getElection(electionId: string): Promise<ElectionView>;
 
   getElections(
-    pageNumber: string,
-    pageSize: string
+    pageNumber: bigint,
+    pageSize: number
   ): Promise<Page<ElectionView>>;
 }
 
@@ -62,17 +62,22 @@ export async function electionsContract(
       });
     },
     async getElections(
-      pageNumber: string,
-      pageSize: string
+      pageNumber: bigint,
+      pageSize: number
     ): Promise<Page<ElectionView>> {
-      const count = await contract.elections_count({
-        organization_id: config.account,
-      });
+      const elementsCount = BigInt(
+        await contract.elections_count({
+          organization_id: config.account,
+        })
+      );
       const start = BigInt(pageSize) * (BigInt(pageNumber) - 1n);
+      const pageCount =
+        elementsCount / BigInt(pageSize) +
+        (elementsCount % BigInt(pageSize) !== 0n ? 1n : 0n);
       const length =
-        pageCount(count, pageSize).toString() !== pageNumber
-          ? +pageSize
-          : Number(BigInt(count) % BigInt(pageSize));
+        pageCount !== pageNumber
+          ? pageSize
+          : Number(elementsCount % BigInt(pageSize));
       const elections = await Promise.all(
         Array.from(new Array(length).keys(), (i) => start + BigInt(i))
           .map((i) => i.toString())
@@ -87,18 +92,11 @@ export async function electionsContract(
         pageNumber,
         pageSize: elections.length,
         values: elections,
-        elementsCount: count,
-        pageCount: pageCount(count, pageSize).toString(),
+        elementsCount,
+        pageCount,
       };
     },
   };
-}
-
-function pageCount(elementsCount: string, pageSize: string): bigint {
-  return (
-    BigInt(elementsCount) / BigInt(pageSize) +
-    (BigInt(elementsCount) % BigInt(pageSize) !== 0n ? 1n : 0n)
-  );
 }
 
 interface ContractProxy {

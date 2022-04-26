@@ -178,7 +178,7 @@ describe("Election API tests", () => {
     expect(body.pageNumber).to.equal("2");
     const pageSize = +initialCount > addedCount ? addedCount : initialCount;
     expect(body.pageSize).to.equal(pageSize);
-    expect(body.elementsCount).to.equal(+initialCount + addedCount);
+    expect(body.elementsCount).to.equal(String(+initialCount + addedCount));
     expect(body.pageCount).to.equal(
       Math.ceil((+initialCount + addedCount) / +initialCount).toString()
     );
