@@ -174,10 +174,11 @@ impl Elections {
     /// # Panics
     ///
     /// * Organization should be registered.
-    pub fn elections_count(&self, organization_id: &OrganizationId) -> u128 {
+    pub fn elections_count(&self, organization_id: &OrganizationId) -> String {
         self.organizations
             .get(organization_id)
             .expect(NOT_REGISTERED_ERROR)
+            .to_string()
     }
 
     /// Returns election data.
@@ -411,7 +412,7 @@ mod tests {
 
         let result = contract.elections_count(&organization);
 
-        assert_eq!(result, count);
+        assert_eq!(result, count.to_string());
     }
 
     #[test]

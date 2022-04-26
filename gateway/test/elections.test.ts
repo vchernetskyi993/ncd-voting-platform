@@ -51,6 +51,8 @@ interface ElectionsContract {
     amount: string
   ): Promise<string>;
 
+  elections_count(args: { organization_id: string }): Promise<string>;
+
   get_election(args: {
     organization_id: string;
     election_id: string;
@@ -146,9 +148,58 @@ describe("Election API tests", () => {
     assertDataEqView(saved, fetched);
   });
 
+  it("Should get paginated elections", async () => {
+    // given
+    const initialCount = await contract.elections_count({
+      organization_id: organizationName,
+    });
+    const addedCount = 8;
+    const added = [...Array(addedCount).keys()].map((i) => election());
+    await added.reduce(
+      (result, election) => result.then(() => createElection(election)),
+      Promise.resolve("")
+    );
+
+    // when
+    // get page 2, size - `initialCount`
+    const response = await axios.get(
+      `http://localhost:${port}/elections?page=2&pageSize=${initialCount}`
+    );
+
+    // then
+    expect(response.status).to.equal(200);
+    const body = response.data as {
+      pageNumber: string;
+      pageSize: number;
+      values: ElectionView[];
+      elementsCount: string;
+      pageCount: string;
+    };
+    expect(body.pageNumber).to.equal("2");
+    const pageSize = +initialCount > addedCount ? addedCount : initialCount;
+    expect(body.pageSize).to.equal(pageSize);
+    expect(body.elementsCount).to.equal(+initialCount + addedCount);
+    expect(body.pageCount).to.equal(
+      Math.ceil((+initialCount + addedCount) / +initialCount).toString()
+    );
+    for (let i = 0; i < pageSize; i++) {
+      assertDataEqView(added[i], body.values[i]);
+    }
+  });
+
   after(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
+
+  function createElection(election: ElectionData): Promise<string> {
+    return contract.create_election(
+      {
+        input: election,
+      },
+      undefined,
+      (10n ** 24n).toString()
+    );
+  }
 });
 
 async function connectToNear(keyStore: KeyStore): Promise<Near> {
@@ -182,7 +233,7 @@ async function deployContract(
 
 function createContract(account: Account, name: string): ElectionsContract {
   return new Contract(account, name, {
-    viewMethods: ["get_election"],
+    viewMethods: ["get_election", "elections_count"],
     changeMethods: ["new", "register_organization", "create_election"],
   }) as any as ElectionsContract;
 }
