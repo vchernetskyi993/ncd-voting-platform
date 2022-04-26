@@ -4,14 +4,17 @@ import { ElectionsContract } from "./contract";
 export function electionsRouter(contract: ElectionsContract): Router {
   return express
     .Router()
-    .post("/", (req, res) => {
-      res.status(201).json({ id: contract.createElection(req.body) });
+    .post("/", (req, res, next) => {
+      contract
+        .createElection(req.body)
+        .then((id) => res.status(201).json({ id }))
+        .catch(next);
     })
     .get("/:electionId", (req, res, next) => {
       contract
-        .getElection(BigInt(req.params.electionId))
+        .getElection(req.params.electionId)
         .then((election) => res.json(election))
-        .catch((error) => next(error));
+        .catch(next);
     })
     .get("/", (req, res) => {
       const pageNumber = req.query.page || "1";

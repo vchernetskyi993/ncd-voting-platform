@@ -3,8 +3,8 @@ import { InMemoryKeyStore } from "near-api-js/lib/key_stores";
 import { NearConfig } from "../config";
 
 type ElectionData = {
-  start: bigint;
-  end: bigint;
+  start: string;
+  end: string;
   title: string;
   description: string;
   candidates: string[];
@@ -32,9 +32,9 @@ type Page<T> = {
 };
 
 export interface ElectionsContract {
-  createElection(election: ElectionData): bigint;
+  createElection(election: ElectionData): Promise<string>;
 
-  getElection(electionId: bigint): Promise<ElectionView>;
+  getElection(electionId: string): Promise<ElectionView>;
 
   getElections(pageNumber: number, pageSize: number): Page<ElectionView>;
 }
@@ -45,13 +45,17 @@ export async function electionsContract(
   const contract = await contractProxy(config);
 
   return {
-    createElection(election: ElectionData): bigint {
-      return BigInt(0);
+    createElection(election: ElectionData): Promise<string> {
+      return contract.create_election(
+        { input: election },
+        undefined,
+        "1000000000000000000000000"
+      );
     },
-    getElection(electionId: bigint): Promise<ElectionView> {
+    getElection(electionId: string): Promise<ElectionView> {
       return contract.get_election({
         organization_id: config.account,
-        election_id: electionId.toString(),
+        election_id: electionId,
       });
     },
     getElections(pageNumber: number, pageSize: number): Page<ElectionView> {
@@ -67,7 +71,11 @@ export async function electionsContract(
 }
 
 interface ContractProxy {
-  create_election(args: { election: ElectionData }): Promise<string>;
+  create_election(
+    args: { input: ElectionData },
+    gas: undefined,
+    amount: "1000000000000000000000000"
+  ): Promise<string>;
 
   elections_count(args: { organization_id: string }): Promise<string>;
 

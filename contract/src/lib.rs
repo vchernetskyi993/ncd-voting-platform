@@ -133,7 +133,7 @@ impl Elections {
     /// * Start and end dates are validated based on block timestamp.
     ///   They both should be in the future and end should be after start.
     #[payable]
-    pub fn create_election(&mut self, input: &ElectionInput) -> u128 {
+    pub fn create_election(&mut self, input: &ElectionInput) -> String {
         let election = Election::new(input);
         assert!(
             election.candidates.len() > 1,
@@ -162,7 +162,7 @@ impl Elections {
             .expect(NOT_REGISTERED_ERROR);
         self.organizations.insert(&organization_id, &(id + 1));
         self.elections.insert(&(organization_id, id), &election);
-        id
+        id.to_string()
     }
 
     /// Returns number of elections for an organization.
@@ -283,7 +283,7 @@ mod tests {
             .build());
         let input = ElectionInput::new();
 
-        let id = contract.create_election(&input);
+        let id = contract.create_election(&input).parse().unwrap();
 
         assert_eq!(id, 0);
         assert_eq!(contract.organizations.get(&organization).unwrap(), 1);

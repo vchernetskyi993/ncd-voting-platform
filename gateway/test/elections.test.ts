@@ -47,15 +47,21 @@ interface ElectionsContract {
     args: {
       input: ElectionData;
     },
-    gas: string,
+    gas: undefined,
     amount: string
   ): Promise<string>;
+
+  get_election(args: {
+    organization_id: string;
+    election_id: string;
+  }): Promise<ElectionView>;
 }
 
 describe("Election API tests", () => {
   let port: number;
   let server: Server;
   let contract: ElectionsContract;
+  let organizationName;
 
   before(async () => {
     const keyStore = new UnencryptedFileSystemKeyStore("neardev");
@@ -69,7 +75,7 @@ describe("Election API tests", () => {
     console.log(`Initializing contract...`);
     await ownedContract.new({});
 
-    const organizationName = `test-org.${contractName}`;
+    organizationName = `test-org.${contractName}`;
     console.log(`Creating and registering organization...`);
     const organizationKeyPair = KeyPairEd25519.fromRandom();
     await Promise.all([
@@ -98,6 +104,26 @@ describe("Election API tests", () => {
     );
   });
 
+  it("Should create election", async () => {
+    // given
+    const input = election();
+
+    // when
+    const response = await axios.post(
+      `http://localhost:${port}/elections`,
+      input
+    );
+
+    // then
+    expect(response.status).to.equal(201);
+    const body = response.data as { id: string };
+    const saved = await contract.get_election({
+      organization_id: organizationName,
+      election_id: body.id,
+    });
+    assertDataEqView(input, saved);
+  });
+
   it("Should get election", async () => {
     // given
     const saved = election();
@@ -105,7 +131,7 @@ describe("Election API tests", () => {
       {
         input: saved,
       },
-      "300000000000000",
+      undefined,
       (10n ** 24n).toString()
     );
 
@@ -117,15 +143,7 @@ describe("Election API tests", () => {
     // then
     expect(response.status).to.equal(200);
     const fetched = response.data as ElectionView;
-    expect(fetched.start).to.equal(saved.start);
-    expect(fetched.end).to.equal(saved.end);
-    expect(fetched.title).to.equal(saved.title);
-    expect(fetched.description).to.equal(saved.description);
-    saved.candidates.forEach((name, i) => {
-      const candidate = fetched.candidates[i];
-      expect(candidate.name).to.equal(name);
-      expect(candidate.votes).to.equal("0");
-    });
+    assertDataEqView(saved, fetched);
   });
 
   after(async () => {
@@ -164,7 +182,7 @@ async function deployContract(
 
 function createContract(account: Account, name: string): ElectionsContract {
   return new Contract(account, name, {
-    viewMethods: [],
+    viewMethods: ["get_election"],
     changeMethods: ["new", "register_organization", "create_election"],
   }) as any as ElectionsContract;
 }
@@ -216,4 +234,16 @@ function election(): ElectionData {
     description: "Important description",
     candidates: ["valuable choice", "even more valuable choice"],
   };
+}
+
+function assertDataEqView(data: ElectionData, view: ElectionView): void {
+  expect(view.start).to.equal(data.start);
+  expect(view.end).to.equal(data.end);
+  expect(view.title).to.equal(data.title);
+  expect(view.description).to.equal(data.description);
+  data.candidates.forEach((name, i) => {
+    const candidate = view.candidates[i];
+    expect(candidate.name).to.equal(name);
+    expect(candidate.votes).to.equal("0");
+  });
 }
