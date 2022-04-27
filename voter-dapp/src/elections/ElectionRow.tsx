@@ -1,4 +1,10 @@
-import { Button, TableCell, TableRow, Typography } from "@mui/material";
+import {
+  Button,
+  TableCell,
+  TableRow,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import React from "react";
 import { Election, Elections } from "./contract";
 
@@ -12,8 +18,24 @@ function ElectionRow({
   openVotingModal: (candidates: string[], electionId: number) => void;
 }) {
   const [election, setElection] = React.useState<Election>();
+  const [canVote, setCanVote] = React.useState(false);
+  const [helpMessage, setHelpMessage] = React.useState("Loading...");
   if (!election) {
     contract.getElection(BigInt(electionId)).then((e) => setElection(e));
+  }
+  if (election && helpMessage === "Loading...") {
+    contract.haveVoted(BigInt(electionId)).then((voted) => {
+      if (voted) {
+        setHelpMessage("You've already voted.");
+      } else if (toMillis(election.start) > Date.now()) {
+        setHelpMessage("Election hasn't started yet.");
+      } else if (toMillis(election.end) < Date.now()) {
+        setHelpMessage("Election has already finished.")
+      } else {
+        setHelpMessage("");
+        setCanVote(true);
+      }
+    });
   }
   return (
     <TableRow>
@@ -30,26 +52,29 @@ function ElectionRow({
         )) || []}
       </TableCell>
       <TableCell>
-        {/* TODO: disable button if:
-            * election hasn't started 
-            * election has ended
-            * user already voted
-            Add corresponding messages.
-         */}
-        <Button
-          onClick={() =>
-            openVotingModal(
-              election?.candidates.map(({ name }) => name) || [],
-              electionId
-            )
-          }
-          variant="outlined"
-        >
-          Vote
-        </Button>
+        <Tooltip title={canVote ? "" : helpMessage}>
+          <span>
+            <Button
+              onClick={() =>
+                openVotingModal(
+                  election?.candidates.map(({ name }) => name) || [],
+                  electionId
+                )
+              }
+              variant="outlined"
+              disabled={!canVote}
+            >
+              Vote
+            </Button>
+          </span>
+        </Tooltip>
       </TableCell>
     </TableRow>
   );
+}
+
+function toMillis(nanoseconds: string): number {
+  return Number(BigInt(nanoseconds) / 1_000_000n);
 }
 
 export default ElectionRow;

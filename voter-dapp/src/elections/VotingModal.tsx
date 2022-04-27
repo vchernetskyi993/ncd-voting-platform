@@ -32,10 +32,10 @@ function VotingModal({
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     contract.vote(BigInt(electionId), +choice).then(() => close());
+    setChoice("");
   };
 
   const close = () => {
-    setChoice("");
     closeVotingModal();
   };
 

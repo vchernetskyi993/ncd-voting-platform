@@ -3,9 +3,9 @@ import json
 
 
 def main():
-    now = datetime.utcnow()
+    now = datetime.now()
     election = {
-        "start": f'{nanoseconds(now + timedelta(1))}',
+        "start": f'{nanoseconds(now + timedelta(minutes=1))}',
         "end": f'{nanoseconds(now + timedelta(3))}',
         "title": "My Election",
         "description": "Some short description",

@@ -240,7 +240,7 @@ impl Elections {
     /// # Panics
     ///
     /// * `election_id` can not be parsed as u128
-    pub fn have_voted(&self, organization_id: &OrganizationId, election_id: &String) -> bool {
+    pub fn have_voted(&mut self, organization_id: &OrganizationId, election_id: &String) -> bool {
         self.voters.contains(&(
             organization_id.clone(),
             election_id.parse().unwrap(),
@@ -494,7 +494,7 @@ mod tests {
 
     #[test]
     fn should_return_false_if_not_voted() {
-        let contract = create_contract();
+        let mut contract = create_contract();
         let organization = account(ORGANIZATION);
         let election_id = 12;
         prepare_env(USER);
