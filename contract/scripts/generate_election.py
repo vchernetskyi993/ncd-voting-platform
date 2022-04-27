@@ -11,7 +11,7 @@ def main():
         "description": "Some short description",
         "candidates": ["Alice", "Bob"],
     }
-    print(json.dumps({"input": election}))
+    print(json.dumps(election))
 
 
 def nanoseconds(t: datetime) -> int:

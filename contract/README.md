@@ -39,5 +39,5 @@ ELECTION_DATA=$(python scripts/generate_election.py)
 near call elections.$MASTER_ACCOUNT create_election \
     --accountId org1.$MASTER_ACCOUNT \
     --deposit 1 \
-    --args "$ELECTION_DATA"
+    --args "{\"input\": \"$ELECTION_DATA\"}"
 ```
