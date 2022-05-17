@@ -1,5 +1,5 @@
-const Elm = require('./Main.elm').Elm;
+const Elm = require("./Main.elm").Elm;
 
 const app = Elm.Main.init({
-  node: document.getElementById('app')
+  node: document.getElementById("app"),
 });
