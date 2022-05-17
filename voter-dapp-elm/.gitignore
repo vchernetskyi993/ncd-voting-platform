@@ -4,5 +4,8 @@ elm-stuff
 # elm-repl generated files
 repl-temp-*
 
+# elm-ts-interop files
+*.elm.d.ts
+
 node_modules
 dist
