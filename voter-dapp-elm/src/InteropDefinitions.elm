@@ -1,8 +1,7 @@
 module InteropDefinitions exposing (Flags, FromElm(..), ToElm(..), interop)
 
-import Json.Encode
 import TsJson.Decode as TsDecode exposing (Decoder)
-import TsJson.Encode as TsEncode exposing (Encoder, optional, required)
+import TsJson.Encode as TsEncode exposing (Encoder, required)
 
 
 interop :
@@ -30,7 +29,7 @@ type alias User =
 
 
 type alias Flags =
-    {}
+    { accountId : String }
 
 
 fromElm : Encoder FromElm
@@ -60,4 +59,5 @@ toElm =
 
 flags : Decoder Flags
 flags =
-    TsDecode.null {}
+    TsDecode.succeed Flags
+        |> TsDecode.andMap (TsDecode.field "accountId" TsDecode.string)

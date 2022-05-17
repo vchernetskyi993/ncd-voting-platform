@@ -1,3 +1,4 @@
+const Dotenv = require("dotenv-webpack");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const HtmlWebpackElementPlugin = require("html-webpack-element-plugin");
 
@@ -23,5 +24,17 @@ module.exports = {
       },
     ],
   },
-  plugins: [new HtmlWebpackPlugin(), new HtmlWebpackElementPlugin()],
+  resolve: {
+    extensions: [".js", ".ts", ".elm"],
+    fallback: {
+      fs: false,
+      path: false,
+      util: false,
+    },
+  },
+  plugins: [
+    new Dotenv(),
+    new HtmlWebpackPlugin(),
+    new HtmlWebpackElementPlugin(),
+  ],
 };
